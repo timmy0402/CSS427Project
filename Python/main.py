@@ -19,6 +19,10 @@ y = [0]
 z = [0]
 
 a_x = 0
+a_y = 0
+a_z = 0
+
+data_lock = threading.Lock()
 
 
 async def run_ble():
@@ -34,22 +38,24 @@ async def run_ble():
         print("Connected to", device.address)
 
         def on_rx(_, data):
+            global a_x, a_y, a_z, x, y, z
+
             try:
-                # TODO: Assign JSON data to x,y,z
-                json_data = json.loads(data.decode().strip())
+                with data_lock:
+                    # TODO: Assign JSON data to x,y,z
+                    json_data = json.loads(data.decode().strip())
 
-                global a_x, x, y, z
-                print("Parsed JSON:", json_data)
-                a_x = json_data["accel"]["x"]
-                a_y = json_data["accel"]["y"]
-                a_z = json_data["accel"]["z"]
-
-                x.append(a_x)
-                y.append(a_y)
-                z.append(a_z)
-                print(a_x)
-                # data.append(json_data)
-                # ("From Arduino:", data.decode().strip())
+                    print("Parsed JSON:", json_data)
+                    # udpating global var
+                    a_x = json_data["accel"]["x"]
+                    a_y = json_data["accel"]["y"]
+                    a_z = json_data["accel"]["z"]
+                    # TODO: this is just updating x,y,z according to acceleration, change to points later on
+                    x.append(a_x)
+                    y.append(a_y)
+                    z.append(a_z)
+                    # data.append(json_data)
+                    # ("From Arduino:", data.decode().strip())
 
             except json.JSONDecodeError:
                 print("Failed to decode JSON")
@@ -70,7 +76,10 @@ def start_ble():
 
 app.layout = html.Div(
     children=[
-        html.Div(children=f"Acceleration x: {a_x}", id="acc_x"),
+        html.Div(
+            children=f"Acceleration x: {a_x}, Acceleration y: {a_y}, Acceleration z: {a_z}",
+            id="acc_x",
+        ),
         dcc.Graph(id="live-3d-graph"),
         dcc.Interval(
             id="interval-component", interval=1 * 1000, n_intervals=0  # in milliseconds
@@ -85,33 +94,35 @@ app.layout = html.Div(
     Input("interval-component", "n_intervals"),
 )
 def update_acceleration(n):
-    print(a_x)
-    return f"Acceleration x: {a_x}"
+    """
+    Updating the accelraion html
+    """
+    with data_lock:
+        return f"Acceleration x: {a_x}, Acceleration y: {a_y}, Acceleration z: {a_z}"
 
 
 @app.callback(
     Output("live-3d-graph", "figure"), Input("interval-component", "n_intervals")
 )
 def update_graph(n):
-    global x, y, z
-
-    fig = go.Figure(
-        data=[
-            go.Scatter3d(
-                x=x,
-                y=y,
-                z=z,
-                mode="lines",
-            )
-        ]
-    )
-    fig.update_layout(
-        title=dict(text="3D live graph"),
-        autosize=False,
-        width=1000,
-        height=1000,
-    )
-    return fig
+    with data_lock:
+        fig = go.Figure(
+            data=[
+                go.Scatter3d(
+                    x=x,
+                    y=y,
+                    z=z,
+                    mode="lines",
+                )
+            ]
+        )
+        fig.update_layout(
+            title=dict(text="3D live graph"),
+            autosize=False,
+            width=1000,
+            height=1000,
+        )
+        return fig
 
 
 # https://stackoverflow.com/questions/63123501/plotly-dash-dcc-interval-disabled-boolean-documentation
