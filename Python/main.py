@@ -4,25 +4,28 @@ from dash import html
 from dash.dependencies import Input, Output, State
 import plotly.graph_objects as go
 import numpy as np
-import random
 from bleak import BleakScanner, BleakClient
 import asyncio
 import threading
+import json
 
 SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
 RX_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
 TX_UUID = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 
 app = dash.Dash(__name__)
-x = [0, 1]
-y = [1, 1]
-z = [1, 1]
+x = [0]
+y = [0]
+z = [0]
+
+a_x = 0
 
 
 async def run_ble():
     print("Scanning for UNO_R4_UART...")
     device = await BleakScanner.find_device_by_filter(
-        lambda d, ad: d.name and "UNO_R4_UART" in d.name)
+        lambda d, ad: d.name and "UNO_R4_UART" in d.name
+    )
     if not device:
         print("Device not found.")
         return
@@ -31,12 +34,23 @@ async def run_ble():
         print("Connected to", device.address)
 
         def on_rx(_, data):
-            print("From Arduino:", data.decode().strip())
             try:
                 # TODO: Assign JSON data to x,y,z
                 json_data = json.loads(data.decode().strip())
+
+                global a_x, x, y, z
                 print("Parsed JSON:", json_data)
-                buffer.write(json_data)
+                a_x = json_data["accel"]["x"]
+                a_y = json_data["accel"]["y"]
+                a_z = json_data["accel"]["z"]
+
+                x.append(a_x)
+                y.append(a_y)
+                z.append(a_z)
+                print(a_x)
+                # data.append(json_data)
+                # ("From Arduino:", data.decode().strip())
+
             except json.JSONDecodeError:
                 print("Failed to decode JSON")
 
@@ -54,36 +68,43 @@ def start_ble():
     loop.run_until_complete(run_ble())
 
 
-# begin ble as a thread
-ble_thread = threading.Thread(target=start_ble, daemon=True)
-ble_thread.start()
-
-app.layout = html.Div([
-    dcc.Graph(id="live-3d-graph"),
-    dcc.Interval(
-        id="interval-component",
-        interval=1 * 1000,
-        n_intervals=0  # in milliseconds
-    ),
-    html.Button("Start/Stop", id="submit-val", n_clicks=0),
-])
+app.layout = html.Div(
+    children=[
+        html.Div(children=f"Acceleration x: {a_x}", id="acc_x"),
+        dcc.Graph(id="live-3d-graph"),
+        dcc.Interval(
+            id="interval-component", interval=1 * 1000, n_intervals=0  # in milliseconds
+        ),
+        html.Button("Start/Stop", id="submit-val", n_clicks=0),
+    ]
+)
 
 
-@app.callback(Output("live-3d-graph", "figure"),
-              Input("interval-component", "n_intervals"))
+@app.callback(
+    Output("acc_x", component_property="children"),
+    Input("interval-component", "n_intervals"),
+)
+def update_acceleration(n):
+    print(a_x)
+    return f"Acceleration x: {a_x}"
+
+
+@app.callback(
+    Output("live-3d-graph", "figure"), Input("interval-component", "n_intervals")
+)
 def update_graph(n):
     global x, y, z
-    # Generate random data for the 3D scatter plot
-    x.append(random.randint(-30, 30))
-    y.append(random.randint(-30, 30))
-    z.append(random.randint(-30, 30))
 
-    fig = go.Figure(data=[go.Scatter3d(
-        x=x,
-        y=y,
-        z=z,
-        mode="lines",
-    )])
+    fig = go.Figure(
+        data=[
+            go.Scatter3d(
+                x=x,
+                y=y,
+                z=z,
+                mode="lines",
+            )
+        ]
+    )
     fig.update_layout(
         title=dict(text="3D live graph"),
         autosize=False,
@@ -107,4 +128,9 @@ def callback_func_start_stop_interval(button_clicks, disabled_state):
 
 
 if __name__ == "__main__":
+
+    # begin ble as a thread
+    ble_thread = threading.Thread(target=start_ble, daemon=True)
+    ble_thread.start()
+
     app.run(debug=True)
