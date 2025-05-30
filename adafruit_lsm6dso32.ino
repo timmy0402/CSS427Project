@@ -4,34 +4,33 @@
 #include <Adafruit_LSM6DSO32.h>
 #include <ArduinoBLE.h>
 
-// For SPI mode, we need a CS pin
-#define LSM_CS 10
-// For software-SPI mode we need SCK/MOSI/MISO pins
-#define LSM_SCK 13
-#define LSM_MISO 12
-#define LSM_MOSI 11
+// // For SPI mode, we need a CS pin
+// #define LSM_CS 10
+// // For software-SPI mode we need SCK/MOSI/MISO pins
+// #define LSM_SCK 13
+// #define LSM_MISO 12
+// #define LSM_MOSI 11
 
-const char* serviceUUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
-const char* rxUUID      = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"; // write
-const char* txUUID      = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"; // notify
+const char* serviceUUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9C";
+const char* rxUUID      = "6E400002-B5A3-F393-E0A9-E50E24DCCA9C";
+const char* txUUID      = "6E400003-B5A3-F393-E0A9-E50E24DCCA9C";
 BLEService uartService(serviceUUID);
 BLECharacteristic txChar(txUUID, BLENotify, 512);
 BLECharacteristic rxChar(rxUUID, BLEWrite, 512);
+unsigned long currentTime;
 
 
 Adafruit_LSM6DSO32 dso32;
 void setup(void) {
   Serial.begin(115200);
+  currentTime = millis();
   while (!Serial)
     delay(10); // will pause Zero, Leonardo, etc until serial console opens
 
   Serial.println("Adafruit LSM6DSO32 test!");
 
 
-
-  if (!dso32.begin_I2C()) {
-    // if (!dso32.begin_SPI(LSM_CS)) {
-    // if (!dso32.begin_SPI(LSM_CS, LSM_SCK, LSM_MISO, LSM_MOSI)) {
+  if (!dso32.begin_I2C(LSM6DS_I2CADDR_DEFAULT, &Wire1)) {
     Serial.println("Failed to find LSM6DSO32 chip");
     while (1) {
       delay(10);
@@ -180,7 +179,8 @@ void loop() {
   Serial.print("Connected to ");
   Serial.println(central.address());
   while(central.connected()) {
-sensors_event_t accel;
+  currentTime = millis();
+  sensors_event_t accel;
   sensors_event_t gyro;
   sensors_event_t temp;
   dso32.getEvent(&accel, &gyro, &temp);
@@ -214,7 +214,7 @@ json += "\"accel\": {\"x\": " + String(accel.acceleration.x, 4) +
 json += "\"gyro\": {\"x\": " + String(gyro.gyro.x, 4) +
         ", \"y\": " + String(gyro.gyro.y, 4) +
         ", \"z\": " + String(gyro.gyro.z, 4) + "}, ";
-json += "\"temp\": " + String(temp.temperature, 2);
+json += "\"time\": " + String(currentTime);
 json += "}";
 
 txChar.writeValue(json.c_str());
