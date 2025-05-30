@@ -1,0 +1,3 @@
+[submodule "modules/ble-imu-orientation"]
+	path = modules/ble-imu-orientation
+	url = https://github.com/JosiahBizure/ble-imu-orientation.git
